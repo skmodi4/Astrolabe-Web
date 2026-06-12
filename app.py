@@ -60,6 +60,11 @@ SECTORS = {
 
 ZONE_SCORES = [1, 1, -1, 1, 0, -1, 1, -1, 1, -1, 1, -1]
 
+# KP Ayanamsha Helper
+def set_ayanamsha():
+    swe.set_sid_mode(swe.SIDM_KRISHNAMURTI)
+
+
 # ==========================================
 # CORE CALCULATION FUNCTIONS
 # ==========================================
@@ -102,19 +107,19 @@ def get_nl_sl(longitude):
 
 def get_lagna(year, month, day, hour, minute):
     jd = get_jd(year, month, day, hour, minute)
-    swe.set_sid_mode(swe.SIDM_LAHIRI)
-    cusps, ascmc = swe.houses_ex(jd, 12.9716, 77.5946, b'P', swe.FLG_SIDEREAL)
+    swe.set_sid_mode(swe.SIDM_KRISHNAMURTI)
+    cusps, ascmc = swe.houses_ex(jd, 19.0601, 72.8601, b'P', swe.FLG_SIDEREAL)
     return int(math.floor(ascmc[0] + 0.5)) % 360
 
 def get_moon_nl_sl(year, month, day, hour, minute):
     jd = get_jd(year, month, day, hour, minute)
-    swe.set_sid_mode(swe.SIDM_LAHIRI)
+    swe.set_sid_mode(swe.SIDM_KRISHNAMURTI)
     pos, _ = swe.calc_ut(jd, swe.MOON, swe.FLG_SWIEPH | swe.FLG_SIDEREAL)
     return get_nl_sl(pos[0])
 
 def get_planetary_positions(year, month, day, hour, minute):
     jd = get_jd(year, month, day, hour, minute)
-    swe.set_sid_mode(swe.SIDM_LAHIRI)
+    swe.set_sid_mode(swe.SIDM_KRISHNAMURTI)
     
     planets = {
         "SU": swe.SUN, "MO": swe.MOON, "MA": swe.MARS, "ME": swe.MERCURY, 
@@ -135,7 +140,7 @@ def get_planetary_positions(year, month, day, hour, minute):
 
 def get_tithi_info(year, month, day, hour=9, minute=15):
     jd = get_jd(year, month, day, hour, minute)
-    swe.set_sid_mode(swe.SIDM_LAHIRI)
+    swe.set_sid_mode(swe.SIDM_KRISHNAMURTI)
     sun_pos, _ = swe.calc_ut(jd, swe.SUN, swe.FLG_SWIEPH | swe.FLG_SIDEREAL)
     moon_pos, _ = swe.calc_ut(jd, swe.MOON, swe.FLG_SWIEPH | swe.FLG_SIDEREAL)
     
@@ -199,6 +204,30 @@ def calculate_sector_scores(year, month, day, hour, minute):
         })
         
     return pd.DataFrame(sector_results), planets, lagna
+
+
+# ==========================================
+# BULLISH / BEARISH PLANET TABLE
+# ==========================================
+def get_bullish_bearish_planets(year, month, day, hour, minute):
+    lagna = get_lagna(year, month, day, hour, minute)
+    planets = get_planetary_positions(year, month, day, hour, minute)
+    inner_offset = 30 - lagna
+
+    bullish = []
+    bearish = []
+
+    for p_name, data in planets.items():
+        shifted_deg = (data["deg"] + inner_offset) % 360
+        zone_idx = int(shifted_deg // 30)
+        zone_score = ZONE_SCORES[zone_idx]
+
+        if zone_score > 0:
+            bullish.append(p_name)
+        elif zone_score < 0:
+            bearish.append(p_name)
+
+    return bullish, bearish
 
 # ==========================================
 # PRE-CALCULATED DAILY TIMELINES (CACHED)
@@ -555,6 +584,20 @@ with col_right:
         selected_time.hour, selected_time.minute
     )
     
+
+    bullish_planets, bearish_planets = get_bullish_bearish_planets(
+        selected_date.year, selected_date.month, selected_date.day,
+        selected_time.hour, selected_time.minute
+    )
+
+    bb_df = pd.DataFrame({
+        f"BULLISH ({len(bullish_planets)})": [", ".join(bullish_planets) if bullish_planets else "-"],
+        f"BEARISH ({len(bearish_planets)})": [", ".join(bearish_planets) if bearish_planets else "-"]
+    })
+
+    st.markdown("### Planet Position Summary")
+    st.table(bb_df)
+
     st.subheader("Intraday Live Scoring")
     
     malefics = ["SA", "MA", "RA"]
